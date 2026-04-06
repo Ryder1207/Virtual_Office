@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web3 虛擬辦公室 | 入口中心</title>
+    <style>
+        :root { --primary: #4f46e5; --dark: #1e293b; }
+        body { font-family: 'Segoe UI', system-ui, sans-serif; background: #f8fafc; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .hero-card { background: white; padding: 40px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.05); width: 400px; text-align: center; }
+        h1 { color: var(--dark); margin-bottom: 10px; }
+        p { color: #64748b; font-size: 14px; line-height: 1.6; }
+        .setup-zone { margin-top: 30px; border-top: 1px solid #e2e8f0; padding-top: 20px; display: none; }
+        .input-group { margin: 15px 0; text-align: left; }
+        label { display: block; font-size: 12px; font-weight: bold; color: #475569; margin-bottom: 5px; }
+        input { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: 0.2s; }
+        .btn-web3 { background: #f59e0b; color: white; margin-bottom: 10px; }
+        .btn-enter { background: var(--primary); color: white; margin-top: 10px; }
+        button:disabled { background: #94a3b8; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div class="hero-card">
+    <h1>🏢 Virtual Office</h1>
+    <p>這是一個基於 Web3 技術的去中心化虛擬辦公室。無需註冊，僅需簽名即可與全球夥伴即時協作。</p>
+
+    <div id="loginSection">
+        <button class="btn-web3" onclick="connectWallet()">🦊 連結 MetaMask</button>
+        <div style="margin-top: 15px;">
+            <a href="#" onclick="joinAsGuest()" style="color: #64748b; font-size: 13px; text-decoration: none;">或者：以訪客身分加入 🏃‍♂️</a>
+        </div>
+        <div id="status" style="font-size: 12px; color: #ef4444;">尚未連線</div>
+    </div>
+
+    <div id="setupSection" class="setup-zone">
+        <div class="input-group">
+            <label>角色暱稱</label>
+            <input type="text" id="nickname">
+        </div>
+
+        <div class="input-group">
+            <label>房間代碼 (建立或加入)</label>
+            <input type="text" id="roomCode" placeholder="預設：Lobby (大廳)">
+            <p style="font-size: 11px; color: #94a3b8; margin-top: 4px;">* 與朋友輸入相同的代碼即可進入同個辦公室</p>
+        </div>
+
+        <div style="margin-top: 5px;">
+            <button type="button" style="background:#64748b; font-size: 11px; padding: 5px;" 
+                    onclick="document.getElementById('roomCode').value = Math.random().toString(36).substring(2,10).toUpperCase()">
+                產生隨機新房間代碼
+            </button>
+        </div>
+
+        <div class="input-group">
+            <label>代表顏色</label>
+            <input type="color" id="playerColor" value="#4f46e5" style="height: 40px; padding: 2px;">
+        </div>
+        <button class="btn-enter" onclick="enterOffice()">進入辦公室</button>
+    </div>
+</div>
+
+<script>
+    let userAddress = "";
+
+    // 新增：訪客登入邏輯
+    function joinAsGuest() {
+        userAddress = "Guest_" + Math.random().toString(36).substring(2, 8); // 隨機生成一個訪客 ID
+        
+        document.getElementById('status').innerText = "💡 模式：訪客瀏覽";
+        document.getElementById('status').style.color = "#64748b";
+        
+        // 隱藏登入區，顯示設定區
+        document.getElementById('loginSection').style.display = "none";
+        document.getElementById('setupSection').style.display = "block";
+        
+        // 預填一個預設暱稱，讓訪客更方便
+        document.getElementById('nickname').value = "神秘訪客";
+    }
+
+    async function connectWallet() {
+        if (typeof window.ethereum !== 'undefined') {
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                userAddress = accounts[0];
+                
+                document.getElementById('status').innerText = "✅ 已連結: " + userAddress.substring(0, 10) + "...";
+                document.getElementById('status').style.color = "#10b981";
+                
+                // 隱藏登入區，顯示設定區
+                document.getElementById('loginSection').style.display = "none";
+                document.getElementById('setupSection').style.display = "block";
+            } catch (err) {
+                alert("連線失敗: " + err.message);
+            }
+        } else {
+            alert("請安裝 MetaMask！或者點擊下方的訪客模式進入。");
+        }
+    }
+
+    function enterOffice() {
+        const name = document.getElementById('nickname').value.trim();
+        const color = document.getElementById('playerColor').value;
+        const room = document.getElementById('roomCode').value.trim() || "Lobby";
+
+        if (!name) {
+            alert("請輸入一個帥氣的暱稱！");
+            return;
+        }
+
+        // 使用 localStorage 存檔 (符合老師要求的讀存檔特性)
+        localStorage.setItem('vOffice_name', name);
+        localStorage.setItem('vOffice_color', color);
+        localStorage.setItem('vOffice_address', userAddress);
+        localStorage.setItem('vOffice_room', room);
+
+        // 跳轉到辦公室頁面
+        window.location.href = `office.html?room=${encodeURIComponent(room)}`; 
+    }
+</script>
+</body>
+</html>
