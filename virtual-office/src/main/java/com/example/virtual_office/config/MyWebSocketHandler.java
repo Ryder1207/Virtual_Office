@@ -2,73 +2,117 @@ package com.example.virtual_office.config;
 
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+import com.example.virtual_office.model.TableState;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import java.io.IOException;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class MyWebSocketHandler extends TextWebSocketHandler {
     
-    // 關鍵修改：使用 Map 管理房間。Key = roomID, Value = 該房間的所有連線
+    // 用於處理 JSON 解析
+    private final ObjectMapper objectMapper = new ObjectMapper();
+    
+    // 管理連線
     private static final Map<String, CopyOnWriteArrayList<WebSocketSession>> roomMap = new ConcurrentHashMap<>();
+    
+    // 管理桌子狀態 (桌子 ID -> 桌子狀態)
+    private final Map<String, TableState> tables = new ConcurrentHashMap<>();
 
-    // 當新連線建立時
-    @Override
-    public void afterConnectionEstablished(WebSocketSession session) {
-        String roomID = getRoomId(session); // 取得網址參數中的 room
-        
-        // 如果房間還不存在，就開一個新的清單；如果存在，就加入
-        roomMap.computeIfAbsent(roomID, k -> new CopyOnWriteArrayList<>()).add(session);
-        
-        // 把房間 ID 存入 session 的自定義屬性中，方便之後讀取
-        session.getAttributes().put("roomID", roomID);
-
-        System.out.println("🏠 房間 [" + roomID + "] 新夥伴加入！ID: " + session.getId());
+    // 建構子：在 Handler 啟動時就初始化桌子
+    public MyWebSocketHandler() {
+        initTables();
     }
 
-    // 核心邏輯：只廣播給「同一個房間」的人
+    private void initTables() {
+        tables.put("desk_1", new TableState("desk_1", "WORK", 1));
+        tables.put("desk_2", new TableState("desk_2", "WORK", 1));
+        tables.put("meeting_main", new TableState("meeting_main", "MEETING", 5));
+    }
+
+    @Override
+    public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        String roomID = getRoomId(session);
+        roomMap.computeIfAbsent(roomID, k -> new CopyOnWriteArrayList<>()).add(session);
+        session.getAttributes().put("roomID", roomID);
+
+        // --- 關鍵加分項：新玩家進來時，立刻把目前的桌子狀態發送給他 ---
+        String currentTablesMsg = objectMapper.writeValueAsString(Map.of(
+            "type", "INITIAL_TABLES",
+            "tables", tables
+        ));
+        session.sendMessage(new TextMessage(currentTablesMsg));
+
+        System.out.println("🏠 房間 [" + roomID + "] 新夥伴加入！");
+    }
+
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
+        JsonNode root = objectMapper.readTree(message.getPayload());
+        String type = root.has("type") ? root.get("type").asText() : "";
         String roomID = (String) session.getAttributes().get("roomID");
-        
+
+        // 1. 處理「新增工具到桌上」的邏輯
+        if ("ADD_TOOL".equals(type)) {
+            String tableId = root.get("tableId").asText();
+            TableState table = tables.get(tableId);
+
+            if (table != null && table.getTools().size() < table.getMaxSlots()) {
+                TableState.ToolInfo newTool = new TableState.ToolInfo();
+                newTool.name = root.get("toolName").asText();
+                newTool.url = root.get("url").asText();
+                // 這裡之後可以加入 Web3 位址紀錄 newTool.addedBy = ...
+                table.getTools().add(newTool);
+
+                // 準備桌子更新的廣播訊息
+                String updateMsg = objectMapper.writeValueAsString(Map.of(
+                    "type", "TABLE_UPDATE",
+                    "tableId", tableId,
+                    "tools", table.getTools()
+                ));
+                broadcastToRoom(roomID, updateMsg);
+            }
+        } 
+        // 2. 處理原本的角色移動、聊天等廣播 (原封不動轉發)
+        else {
+            broadcastToRoom(roomID, message.getPayload());
+        }
+    }
+
+    // 封裝一個只廣播給同房間的輔助方法
+    private void broadcastToRoom(String roomID, String payload) throws IOException {
         if (roomID != null && roomMap.containsKey(roomID)) {
-            CopyOnWriteArrayList<WebSocketSession> roomSessions = roomMap.get(roomID);
-            
-            for (WebSocketSession s : roomSessions) {
+            TextMessage textMessage = new TextMessage(payload);
+            for (WebSocketSession s : roomMap.get(roomID)) {
                 if (s.isOpen()) {
-                    s.sendMessage(message);
+                    s.sendMessage(textMessage);
                 }
             }
         }
     }
 
-    // 當連線關閉時
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         String roomID = (String) session.getAttributes().get("roomID");
-        
         if (roomID != null && roomMap.containsKey(roomID)) {
             roomMap.get(roomID).remove(session);
-            
-            // 如果房間沒人了，就把房間刪掉節省記憶體
             if (roomMap.get(roomID).isEmpty()) {
                 roomMap.remove(roomID);
             }
         }
-        System.out.println("夥伴離開了房間 [" + roomID + "]");
     }
 
-    // 輔助方法：解析 URI 中的 room 參數
     private String getRoomId(WebSocketSession session) {
         try {
-            String query = session.getUri().getQuery(); // 取得 "room=Lobby" 這種字串
+            String query = session.getUri().getQuery();
             if (query != null && query.contains("room=")) {
-                // 簡單切分字串取得 room 名稱
                 return query.split("room=")[1].split("&")[0];
             }
-        } catch (Exception e) {
-            System.err.println("解析房間 ID 失敗，預設進入 Lobby");
-        }
+        } catch (Exception e) {}
         return "Lobby";
     }
 }
