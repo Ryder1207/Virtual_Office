@@ -98,7 +98,7 @@
         addLog(`系統：你已進入房間 [${roomID}]`);
 
         // --- 2. WebSocket 邏輯 ---
-        const socket = new WebSocket(`ws://localhost:8080/ws?room=${roomID}`);
+        const socket = new WebSocket(`wss://virtual-office-bxop.onrender.com/ws?room=${roomID}`);
 
         socket.onopen = () => {
             statusText.textContent = `已連線至房間: ${roomID}`;
