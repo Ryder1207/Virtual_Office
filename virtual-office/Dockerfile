@@ -3,7 +3,8 @@ FROM eclipse-temurin:21-jdk-alpine
 WORKDIR /app
 # 將所有檔案複製進去
 COPY . .
-# 執行 Maven 打包 (跳過測試以加快速度)
-RUN ./mvnw clean package -DskipTests
-# 執行程式
-CMD ["java", "-jar", "target/*.jar"]
+# 2. 賦予執行權限並打包
+RUN chmod +x mvnw && ./mvnw clean package -DskipTests
+
+# 3. 正確的啟動指令 (明確指定檔名，注意是橫線 -)
+CMD ["java", "-jar", "target/virtual-office-0.0.1-SNAPSHOT.jar"]
